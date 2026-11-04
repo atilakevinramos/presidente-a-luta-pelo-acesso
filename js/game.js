@@ -1,3 +1,4 @@
+
 /**
  * game.js - Avanço de turnos, contadores de estatísticas para o Hall da Fama e ciclo de jogo.
  */
@@ -17,27 +18,32 @@ function getRandomName() {
   return `${FIRST_NAMES[Math.floor(Math.random() * FIRST_NAMES.length)]} ${LAST_NAMES[Math.floor(Math.random() * LAST_NAMES.length)]}`;
 }
 
-export function advanceGameTurn() {
-  gameState.turn++;
+// Identifica a carreira para controlar o acumulado financeiro.
+let financeMonthCareerId = null;
 
-  let seasonEnded = false;
+export function advanceGameTurn() {
+  // Processa o turno atual antes de avançar o contador.
+  // Assim, a primeira partida da temporada é realmente a rodada 1.
+  const currentTurn = gameState.turn;
+
+  // Inicializa ou reinicia o acumulador quando uma nova carreira começa.
+  if (financeMonthCareerId !== gameState.careerId) {
+    financeMonthCareerId = gameState.careerId;
+    gameState.homeMatchesThisMonth = 0;
+  }
+
+  if (!Number.isFinite(gameState.homeMatchesThisMonth)) {
+    gameState.homeMatchesThisMonth = 0;
+  }
+
   let seasonResultInfo = null;
 
   processStaffCardsTurnEffects();
   processContractsTurn();
   processPoliticsTurn();
 
-  if (gameState.turn > 38) {
-    seasonResultInfo = processSeasonEnd();
-    seasonEnded = true;
-    gameState.year++;
-    gameState.turn = 1;
-    gameState.stats.seasonsPlayed++;
-    gameState.politics.mandateYear = gameState.politics.mandateYear === 1 ? 2 : 1;
-  }
+  const matchDetails = simulateTurnMatches(currentTurn);
 
-  const matchDetails = simulateTurnMatches(gameState.turn);
-  
   // Contagem de estatísticas para o Hall da Fama
   if (matchDetails.outcomeType === 'win') {
     gameState.stats.winsCount++;
@@ -50,32 +56,55 @@ export function advanceGameTurn() {
   }
 
   gameState.historyLog.unshift({
-    turn: gameState.turn,
+    turn: currentTurn,
     text: `[Partida]: ${matchDetails.matchResultText}`
   });
 
   processPromisesCheck(matchDetails.outcomeType);
 
-  const netResult = processMonthlyFinances(matchDetails.matchInfo.homeMatchesCount);
-  gameState.historyLog.unshift({
-    turn: gameState.turn,
-    text: `[Finanças]: Resultado operacional do período foi de R$ ${netResult.toLocaleString('pt-BR')}.`
-  });
+  // Acumula os jogos em casa até o fechamento financeiro do período.
+  gameState.homeMatchesThisMonth += matchDetails.matchInfo.homeMatchesCount || 0;
 
-  if (netResult < -20000) {
-    modifyBoardSupport(-2, "Déficit operacional no mês");
+  // Fecha as finanças a cada 4 rodadas.
+  // A rodada 38 também fecha o período, mesmo que seja incompleto.
+  const isMonthlyFinancialTurn = currentTurn % 4 === 0 || currentTurn >= 38;
+
+  if (isMonthlyFinancialTurn) {
+    const netResult = processMonthlyFinances(gameState.homeMatchesThisMonth);
+
+    gameState.historyLog.unshift({
+      turn: currentTurn,
+      text: `[Finanças]: Resultado operacional do período foi de R$ ${netResult.toLocaleString('pt-BR')}.`
+    });
+
+    if (netResult < -20000) {
+      modifyBoardSupport(-2, "Déficit operacional no mês");
+    }
+
+    // Zera o acumulador para o próximo período financeiro.
+    gameState.homeMatchesThisMonth = 0;
   }
 
-  if (gameState.turn % 2 === 0) {
+  if (currentTurn % 2 === 0) {
     refreshCoachMarket();
   }
 
   processPlayerDevelopmentAndAging();
 
-  if (seasonEnded) {
+  // A temporada só termina depois de disputar a 38ª partida.
+  if (currentTurn >= 38) {
+    seasonResultInfo = processSeasonEnd();
+
+    gameState.year++;
+    gameState.turn = 1;
+    gameState.stats.seasonsPlayed++;
+    gameState.politics.mandateYear = gameState.politics.mandateYear === 1 ? 2 : 1;
+
     gameState.squad.forEach(p => p.age++);
     processRetirements();
     processVoiceOfExperienceStartOfSeason();
+  } else {
+    gameState.turn = currentTurn + 1;
   }
 
   const polEvent = checkRandomPoliticalEvent();
@@ -165,7 +194,7 @@ function processContractsTurn() {
 
 function processStaffCardsTurnEffects() {
   const scoutCards = gameState.staff.scout && gameState.staff.scout.cards ? gameState.staff.scout.cards : [];
-  
+
   if (scoutCards.some(c => c.id === 'eagle_eye') && gameState.turn % 30 === 0) {
     const positions = ["GOL", "DEF", "MEI", "ATA"];
     const newTalent = {
@@ -208,6 +237,7 @@ function processStaffCardsTurnEffects() {
     addTransaction("Prejuízo Orçamentário (Treinador Perdedor)", "Base", -30000);
   }
 
+  // O Formador de Muralhas é verificado no turno 1 de cada temporada.
   if (youthCards.some(c => c.id === 'wall_maker') && gameState.turn === 1) {
     if (Math.random() < 0.5) {
       const gkTalent = {
@@ -288,10 +318,19 @@ function processSeasonEnd() {
   gameState.scoutsUsedThisYear = 0;
   gameState.coachSigningsUsedThisYear = 0;
 
-  if (playerPos <= 4) {
-    isPromotion = true;
-    if (playerPos === 1) isChampion = true;
+  // Somente o primeiro colocado recebe o título de campeão.
+  if (playerPos === 1) {
+    isChampion = true;
     gameState.stats.titlesCount++;
+  }
+
+  // O acesso existe somente nas Séries D, C e B.
+  if (
+    playerPos >= 1 &&
+    playerPos <= 4 &&
+    ["Série D", "Série C", "Série B"].includes(currentDiv)
+  ) {
+    isPromotion = true;
 
     if (currentDiv === "Série D") {
       gameState.club.division = "Série C";
@@ -317,13 +356,13 @@ function processSeasonEnd() {
       title = "Acesso Histórico à Série A!";
       gameState.fans.trust = 100;
       modifyBoardSupport(25, "Acesso histórico para a Série A");
-    } else if (currentDiv === "Série A" && playerPos === 1) {
-      const prize = 3000000;
-      addTransaction("Premiação de CAMPEÃO DA SÉRIE A", "Premiações", prize);
-      seasonMsg = `👑 CAMPEÃO BRASILEIRO! O clube atingiu o topo do futebol nacional e faturou R$ ${prize.toLocaleString('pt-BR')}!`;
-      title = "Campeão Brasileiro da Série A!";
-      modifyBoardSupport(30, "Título Brasileiro da Série A");
     }
+  } else if (currentDiv === "Série A" && playerPos === 1) {
+    const prize = 3000000;
+    addTransaction("Premiação de CAMPEÃO DA SÉRIE A", "Premiações", prize);
+    seasonMsg = `👑 CAMPEÃO BRASILEIRO! O clube atingiu o topo do futebol nacional e faturou R$ ${prize.toLocaleString('pt-BR')}!`;
+    title = "Campeão Brasileiro da Série A!";
+    modifyBoardSupport(30, "Título Brasileiro da Série A");
   } else if (playerPos >= 17) {
     if (currentDiv === "Série A") {
       gameState.club.division = "Série B";

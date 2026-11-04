@@ -272,59 +272,65 @@ export const gameState = {
   standings: [],
   ledger: [],
   historyLog: [],
-  lastMonthlyResult: 0
+  lastMonthlyResult: 0,
+  homeMatchesThisMonth: 0
 };
 
+const initialGameStateSnapshot = JSON.parse(JSON.stringify(gameState));
+
 export function resetGameState() {
-  gameState.careerId = 'car_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
-  gameState.presidentName = "Presidente";
-  gameState.turn = 1;
-  gameState.year = 2026;
-  gameState.stats = {
-    seasonsPlayed: 0,
-    titlesCount: 0,
-    winsCount: 0,
-    drawsCount: 0,
-    lossesCount: 0,
-    specialObjectivesCompleted: 0
-  };
-  gameState.club.cash = 200000;
-  gameState.club.debt = 0;
-  gameState.club.ticketPrice = 30;
-  gameState.autoSubstituteMode = 'fatigue';
-  gameState.autoRenewEnabled = false;
-  gameState.autoRenewMaxSalary = 10000;
-  gameState.coachSigningsUsedThisYear = 0;
-  gameState.fans.trust = 60;
-  gameState.board.support = 70;
-  gameState.board.nextElectionTurn = 76;
-  gameState.politics = {
-    mandateYear: 1,
-    groups: { situacao: 50, independentes: 30, oposicao: 20 },
-    cooldowns: { reuniao: 0, almoco: 0, plano: 0, reivindicacao: 0, negociacao: 0 },
-    promises: [],
-    eventsHistory: [],
-    opponentCandidate: { name: "Dr. Arthur Medeiros", strength: 45 },
-    electionResultsHistory: []
-  };
-  gameState.bankruptcy.consecutiveNegativeMonths = 0;
-  gameState.youthInfraLevel = 1;
-  gameState.academyMaintCost = 7000;
-  gameState.scoutsUsedThisYear = 0;
-  gameState.squad = generateInitialSquad();
-  gameState.youthPlayers = generateInitialYouth();
-  gameState.staff.coach = { 
-    name: getRandomName(), 
-    role: "Treinador Principal", 
-    salary: 15500, 
-    coachOverall: 26, 
-    cards: generateRandomCoachCards(false), 
-    level: 2 
-  };
-  gameState.staff.scout.cards = generateStaffCards('scout');
-  gameState.staff.youthCoach.cards = generateStaffCards('youthCoach');
-  gameState.staff.physio.cards = generateStaffCards('physio');
-  gameState.ledger = [];
-  gameState.historyLog = [];
-  gameState.lastMonthlyResult = 0;
+  // Cria uma cópia completa do estado inicial, restaurando também
+  // propriedades que a versão anterior do reset esquecia de limpar.
+  const freshState = JSON.parse(JSON.stringify(initialGameStateSnapshot));
+
+  // Cada carreira recebe um identificador novo.
+  freshState.careerId = 'car_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+
+  // Gera novamente os jogadores e os profissionais aleatórios.
+  freshState.squad = generateInitialSquad();
+  freshState.youthPlayers = generateInitialYouth();
+
+  freshState.staff.coach.name = getRandomName();
+  freshState.staff.coach.cards = generateRandomCoachCards(false);
+  freshState.staff.assistant.cards = generateRandomCoachCards(true);
+  freshState.staff.scout.cards = generateStaffCards('scout');
+  freshState.staff.youthCoach.cards = generateStaffCards('youthCoach');
+  freshState.staff.physio.cards = generateStaffCards('physio');
+
+  // Renova também os candidatos disponíveis para contratação.
+  freshState.candidates.coach = freshState.candidates.coach.map(candidate => ({
+    ...candidate,
+    name: getRandomName(),
+    cards: generateRandomCoachCards(false)
+  }));
+
+  freshState.candidates.assistant = freshState.candidates.assistant.map(candidate => ({
+    ...candidate,
+    cards: generateRandomCoachCards(true)
+  }));
+
+  freshState.candidates.scout = freshState.candidates.scout.map(candidate => ({
+    ...candidate,
+    name: getRandomName(),
+    cards: generateStaffCards('scout')
+  }));
+
+  freshState.candidates.youthCoach = freshState.candidates.youthCoach.map(candidate => ({
+    ...candidate,
+    name: getRandomName(),
+    cards: generateStaffCards('youthCoach')
+  }));
+
+  freshState.candidates.physio = freshState.candidates.physio.map(candidate => ({
+    ...candidate,
+    name: getRandomName(),
+    cards: generateStaffCards('physio')
+  }));
+
+  // Garante que o controle financeiro comece zerado na nova carreira.
+  freshState.homeMatchesThisMonth = 0;
+
+  // Remove propriedades antigas/dinâmicas e aplica o estado novo completo.
+  Object.keys(gameState).forEach(key => delete gameState[key]);
+  Object.assign(gameState, freshState);
 }
