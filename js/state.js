@@ -1,5 +1,5 @@
 /**
- * state.js - Estado central da partida, geração de nomes brasileiros e sistema de cards (vantagens/desvantagens) para técnicos e comissão.
+ * state.js - Estado central da partida, contadores de carreira para o Hall da Fama e sistema de cards.
  */
 
 const FIRST_NAMES = ["Lucas", "Gabriel", "Matheus", "Pedro", "Guilherme", "Gustavo", "Felipe", "Vinicius", "Bruno", "Eduardo", "Diego", "Rafael", "Rodrigo", "Thiago", "Marcelo", "Leonardo", "Caio", "Enzo", "Henrique", "João", "Carlos", "Daniel"];
@@ -29,7 +29,6 @@ export const NEGATIVE_CARDS = [
   { id: "natural_seller", name: "Vendedor Nato", type: "negative", desc: "Chance de 15% a cada 5 rodadas de vender um jogador aleatório do elenco." }
 ];
 
-// Cards específicos para o Olheiro (2 Positivos, 1 Negativo)
 export const SCOUT_CARDS = {
   positive: [
     { id: "eagle_eye", name: "Olho de Águia", type: "positive", desc: "1 vez a cada 30 rodadas, aparecerá um jogador na base com over 75 e potencial 99." },
@@ -44,10 +43,9 @@ export const SCOUT_CARDS = {
   ]
 };
 
-// Cards específicos para o Treinador da Base (2 Positivos, 1 Negativo)
 export const YOUTH_COACH_CARDS = {
   positive: [
-    { id: "star_hunter", name: "Caçador de Estrelas", type: "positive", desc: "A cada rodada dá um bônus aleatório de 50 mil até 300 mil reais." },
+    { id: "star_hunter", name: "Caçador de Estrelas", type: "positive", desc: "A cada rodada da um bônus aleatório de 50 mil até 300 mil reais." },
     { id: "pifador", name: "Pifador", type: "positive", desc: "Evolui os meias da base 30% mais rápido que o normal." },
     { id: "potentiator", name: "Potencializador", type: "positive", desc: "Aumenta o potencial do jogador em 50%." },
     { id: "wall_maker", name: "Formador de Muralhas", type: "positive", desc: "Uma vez no ano tem 50% de chance de trazer um goleiro de over 70 e potencial 99 na base." }
@@ -58,7 +56,6 @@ export const YOUTH_COACH_CARDS = {
   ]
 };
 
-// Cards específicos para o Preparador Físico (2 Positivos, 1 Negativo)
 export const PHYSIO_CARDS = {
   positive: [
     { id: "med_legend", name: "Lenda da Medicina", type: "positive", desc: "Jogadores recuperam 30% mais rápido a energia." },
@@ -170,9 +167,19 @@ function generateInitialYouth() {
 }
 
 export const gameState = {
-  version: 4.2,
+  version: 5.1,
+  careerId: 'car_' + Date.now() + '_' + Math.floor(Math.random() * 10000),
+  presidentName: "Presidente",
   turn: 1,
   year: 2026,
+  stats: {
+    seasonsPlayed: 0,
+    titlesCount: 0,
+    winsCount: 0,
+    drawsCount: 0,
+    lossesCount: 0,
+    specialObjectivesCompleted: 0
+  },
   club: {
     name: "Grêmio Esportivo Brasil",
     sigla: "GEB",
@@ -194,7 +201,29 @@ export const gameState = {
   },
   board: {
     support: 70,
-    nextElectionTurn: 38
+    nextElectionTurn: 76
+  },
+  politics: {
+    mandateYear: 1,
+    groups: {
+      situacao: 50,
+      independentes: 30,
+      oposicao: 20
+    },
+    cooldowns: {
+      reuniao: 0,
+      almoco: 0,
+      plano: 0,
+      reivindicacao: 0,
+      negociacao: 0
+    },
+    promises: [],
+    eventsHistory: [],
+    opponentCandidate: {
+      name: "Dr. Arthur Medeiros",
+      strength: 45
+    },
+    electionResultsHistory: []
   },
   bankruptcy: {
     consecutiveNegativeMonths: 0
@@ -247,8 +276,18 @@ export const gameState = {
 };
 
 export function resetGameState() {
+  gameState.careerId = 'car_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+  gameState.presidentName = "Presidente";
   gameState.turn = 1;
   gameState.year = 2026;
+  gameState.stats = {
+    seasonsPlayed: 0,
+    titlesCount: 0,
+    winsCount: 0,
+    drawsCount: 0,
+    lossesCount: 0,
+    specialObjectivesCompleted: 0
+  };
   gameState.club.cash = 200000;
   gameState.club.debt = 0;
   gameState.club.ticketPrice = 30;
@@ -258,7 +297,16 @@ export function resetGameState() {
   gameState.coachSigningsUsedThisYear = 0;
   gameState.fans.trust = 60;
   gameState.board.support = 70;
-  gameState.board.nextElectionTurn = 38;
+  gameState.board.nextElectionTurn = 76;
+  gameState.politics = {
+    mandateYear: 1,
+    groups: { situacao: 50, independentes: 30, oposicao: 20 },
+    cooldowns: { reuniao: 0, almoco: 0, plano: 0, reivindicacao: 0, negociacao: 0 },
+    promises: [],
+    eventsHistory: [],
+    opponentCandidate: { name: "Dr. Arthur Medeiros", strength: 45 },
+    electionResultsHistory: []
+  };
   gameState.bankruptcy.consecutiveNegativeMonths = 0;
   gameState.youthInfraLevel = 1;
   gameState.academyMaintCost = 7000;

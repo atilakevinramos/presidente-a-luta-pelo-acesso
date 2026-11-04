@@ -28,7 +28,24 @@ export function loadGame() {
       clearSavedGame();
       return false;
     }
-    
+
+    // Garantia de migração retrocompatível para o Sistema Político
+    if (!parsed.politics) {
+      parsed.politics = {
+        mandateYear: 1,
+        groups: { situacao: 50, independentes: 30, oposicao: 20 },
+        cooldowns: { reuniao: 0, almoco: 0, plano: 0, reivindicacao: 0, negociacao: 0 },
+        promises: [],
+        eventsHistory: [],
+        opponentCandidate: { name: "Dr. Arthur Medeiros", strength: 45 },
+        electionResultsHistory: []
+      };
+    }
+
+    if (!parsed.board || typeof parsed.board.nextElectionTurn !== 'number') {
+      parsed.board = { support: 70, nextElectionTurn: 76 };
+    }
+
     Object.assign(gameState, parsed);
     return true;
   } catch (e) {

@@ -1,5 +1,5 @@
 /**
- * game.js - Avanço de turnos, processamento financeiro, contratos e aplicação dos efeitos dos cards da comissão.
+ * game.js - Avanço de turnos, contadores de estatísticas para o Hall da Fama e ciclo de jogo.
  */
 
 import { gameState } from './state.js';
@@ -8,6 +8,7 @@ import { simulateTurnMatches, initStandings, processPlayerDevelopmentAndAging, p
 import { checkGameConditions, processElectionCheck } from './elections.js';
 import { refreshCoachMarket } from './staff.js';
 import { saveGame } from './save.js';
+import { processPoliticsTurn, processPromisesCheck, modifyBoardSupport, checkRandomPoliticalEvent } from './politics.js';
 
 const FIRST_NAMES = ["Lucas", "Gabriel", "Matheus", "Pedro", "Guilherme", "Gustavo", "Felipe", "Vinicius", "Bruno", "Eduardo", "Diego", "Rafael", "Rodrigo", "Thiago", "Marcelo", "Leonardo", "Caio", "Enzo", "Henrique", "João"];
 const LAST_NAMES = ["Silva", "Santos", "Oliveira", "Souza", "Rodrigues", "Ferreira", "Alves", "Pereira", "Lima", "Gomes", "Ribeiro", "Carvalho", "Lopes", "Barbosa", "Vieira", "Martins", "Rocha"];
@@ -24,25 +25,46 @@ export function advanceGameTurn() {
 
   processStaffCardsTurnEffects();
   processContractsTurn();
+  processPoliticsTurn();
 
   if (gameState.turn > 38) {
     seasonResultInfo = processSeasonEnd();
     seasonEnded = true;
     gameState.year++;
     gameState.turn = 1;
+    gameState.stats.seasonsPlayed++;
+    gameState.politics.mandateYear = gameState.politics.mandateYear === 1 ? 2 : 1;
   }
 
   const matchDetails = simulateTurnMatches(gameState.turn);
+  
+  // Contagem de estatísticas para o Hall da Fama
+  if (matchDetails.outcomeType === 'win') {
+    gameState.stats.winsCount++;
+    modifyBoardSupport(1, "Vitória na rodada");
+  } else if (matchDetails.outcomeType === 'draw') {
+    gameState.stats.drawsCount++;
+  } else {
+    gameState.stats.lossesCount++;
+    modifyBoardSupport(-1, "Derrota na rodada");
+  }
+
   gameState.historyLog.unshift({
     turn: gameState.turn,
     text: `[Partida]: ${matchDetails.matchResultText}`
   });
+
+  processPromisesCheck(matchDetails.outcomeType);
 
   const netResult = processMonthlyFinances(matchDetails.matchInfo.homeMatchesCount);
   gameState.historyLog.unshift({
     turn: gameState.turn,
     text: `[Finanças]: Resultado operacional do período foi de R$ ${netResult.toLocaleString('pt-BR')}.`
   });
+
+  if (netResult < -20000) {
+    modifyBoardSupport(-2, "Déficit operacional no mês");
+  }
 
   if (gameState.turn % 2 === 0) {
     refreshCoachMarket();
@@ -56,13 +78,17 @@ export function advanceGameTurn() {
     processVoiceOfExperienceStartOfSeason();
   }
 
+  const polEvent = checkRandomPoliticalEvent();
   const electionResult = processElectionCheck();
+
   if (electionResult.defeated) {
     return {
       status: 'gameover',
       reason: electionResult.reason,
       matchDetails,
-      seasonResultInfo
+      seasonResultInfo,
+      electionResult: electionResult.electionResult,
+      polEvent
     };
   }
 
@@ -72,7 +98,8 @@ export function advanceGameTurn() {
       status: 'gameover',
       reason: goCheck.reason,
       matchDetails,
-      seasonResultInfo
+      seasonResultInfo,
+      polEvent
     };
   }
 
@@ -81,7 +108,10 @@ export function advanceGameTurn() {
   return {
     status: 'continue',
     matchDetails,
-    seasonResultInfo
+    seasonResultInfo,
+    electionOccurred: electionResult.electionOccurred,
+    electionResult: electionResult.electionResult,
+    polEvent
   };
 }
 
@@ -94,7 +124,6 @@ function processContractsTurn() {
     if (p.contractMonths === undefined) p.contractMonths = 12;
     p.contractMonths--;
 
-    // Lógica de Renovação Automática
     if (p.contractMonths === 1 && gameState.autoRenewEnabled) {
       if (p.salary <= gameState.autoRenewMaxSalary) {
         p.salary = Math.round(p.salary * 1.20);
@@ -115,7 +144,7 @@ function processContractsTurn() {
   if (autoRenewedPlayers.length > 0) {
     gameState.historyLog.unshift({
       turn: gameState.turn,
-      text: `[🔄 Renovação Automática]: O(s) contrato(s) de ${autoRenewedPlayers.join(', ')} foi(ram) renovado(s) automaticamente por mais 2 anos (dentro do limite salarial).`
+      text: `[🔄 Renovação Automática]: O(s) contrato(s) de ${autoRenewedPlayers.join(', ')} foi(ram) renovado(s) automaticamente por mais 2 anos.`
     });
   }
 
@@ -262,6 +291,7 @@ function processSeasonEnd() {
   if (playerPos <= 4) {
     isPromotion = true;
     if (playerPos === 1) isChampion = true;
+    gameState.stats.titlesCount++;
 
     if (currentDiv === "Série D") {
       gameState.club.division = "Série C";
@@ -270,6 +300,7 @@ function processSeasonEnd() {
       seasonMsg = `🚀 PARABÉNS! O clube conquistou o ACESSO para a SÉRIE C e faturou R$ ${prize.toLocaleString('pt-BR')} de bônus!`;
       title = "Acesso Conquistado à Série C!";
       gameState.fans.trust = Math.min(100, gameState.fans.trust + 20);
+      modifyBoardSupport(15, "Acesso conquistado para a Série C");
     } else if (currentDiv === "Série C") {
       gameState.club.division = "Série B";
       const prize = 500000;
@@ -277,6 +308,7 @@ function processSeasonEnd() {
       seasonMsg = `🚀 PARABÉNS! O clube conquistou o ACESSO para a SÉRIE B e faturou R$ ${prize.toLocaleString('pt-BR')} de bônus!`;
       title = "Acesso Conquistado à Série B!";
       gameState.fans.trust = Math.min(100, gameState.fans.trust + 25);
+      modifyBoardSupport(20, "Acesso conquistado para a Série B");
     } else if (currentDiv === "Série B") {
       gameState.club.division = "Série A";
       const prize = 1500000;
@@ -284,11 +316,13 @@ function processSeasonEnd() {
       seasonMsg = `🏆 HISTÓRICO! O clube alcançou a ELITE DO FUTEBOL BRASILEIRO (SÉRIE A) e faturou R$ ${prize.toLocaleString('pt-BR')}!`;
       title = "Acesso Histórico à Série A!";
       gameState.fans.trust = 100;
+      modifyBoardSupport(25, "Acesso histórico para a Série A");
     } else if (currentDiv === "Série A" && playerPos === 1) {
       const prize = 3000000;
       addTransaction("Premiação de CAMPEÃO DA SÉRIE A", "Premiações", prize);
       seasonMsg = `👑 CAMPEÃO BRASILEIRO! O clube atingiu o topo do futebol nacional e faturou R$ ${prize.toLocaleString('pt-BR')}!`;
       title = "Campeão Brasileiro da Série A!";
+      modifyBoardSupport(30, "Título Brasileiro da Série A");
     }
   } else if (playerPos >= 17) {
     if (currentDiv === "Série A") {
@@ -296,16 +330,19 @@ function processSeasonEnd() {
       seasonMsg = `⚠️ O clube foi rebaixado para a Série B.`;
       title = "Rebaixado";
       gameState.fans.trust = Math.max(0, gameState.fans.trust - 20);
+      modifyBoardSupport(-20, "Rebaixamento para a Série B");
     } else if (currentDiv === "Série B") {
       gameState.club.division = "Série C";
       seasonMsg = `⚠️ O clube foi rebaixado para a Série C.`;
       title = "Rebaixado";
       gameState.fans.trust = Math.max(0, gameState.fans.trust - 20);
+      modifyBoardSupport(-20, "Rebaixamento para a Série C");
     } else if (currentDiv === "Série C") {
       gameState.club.division = "Série D";
       seasonMsg = `⚠️ O clube foi rebaixado para a Série D.`;
       title = "Rebaixado";
       gameState.fans.trust = Math.max(0, gameState.fans.trust - 20);
+      modifyBoardSupport(-20, "Rebaixamento para a Série D");
     }
   }
 
