@@ -28,6 +28,9 @@ function initApp() {
       clearSavedGame();
       resetGameState();
 
+      // Aplica o nome escolhido para o presidente.
+      gameState.presidentName = customConfig.presidentName;
+
       gameState.club.name = customConfig.name;
       gameState.club.sigla = customConfig.sigla;
       gameState.club.primaryColor = customConfig.primaryColor;
